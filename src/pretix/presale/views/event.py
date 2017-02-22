@@ -2,6 +2,7 @@ import sys
 from datetime import datetime
 from importlib import import_module
 
+from pytz import timezone
 import pytz
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -109,20 +110,25 @@ class EventIndex(EventViewMixin, CartMixin, TemplateView):
 
 
 class EventIcalDownload(EventViewMixin, View):
+
+    def get_datetime_with_timezone(self, dt):
+        return dt.replace(tzinfo=timezone(self.request.event.settings.timezone))
+
     def get(self, request, *args, **kwargs):
         if not self.request.event:
             raise Http404(_('Unknown event code or not authorized to access this event.'))
 
         cal = Calendar()
         cal.add('version', '2.0')
-        cal.add('prodid', '-//{}//{}//'.format(self.request.event.organizer.name, self.request.event.name))
+        cal.add('prodid', '-//pretix//{}//{}'.format(settings.PRETIX_INSTANCE_NAME,
+                                                     settings.LANGUAGE_CODE.upper()))
 
         event = Event()
-        event.add('summary', self.request.event.name)
-        event.add('dtstart', self.request.event.date_from)
-        event.add('dtend', self.request.event.date_to)
+        event.add('summary', str(self.request.event.name))
+        event.add('dtstart', self.get_datetime_with_timezone(self.request.event.date_from))
+        event.add('dtend', self.get_datetime_with_timezone(self.request.event.date_to))
         event.add('dtstamp', datetime.now(pytz.utc))
-        event.add('location', self.request.event.location)
+        event.add('location', str(self.request.event.location))
         event.add('organizer', self.request.event.organizer.name)
         cal.add_component(event)
 
